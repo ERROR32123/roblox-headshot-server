@@ -1,31 +1,31 @@
-const express = require('express'); // web server
-const multer = require('multer');   // handles file uploads
-const path = require('path');       // file paths
-const fs = require('fs');           // filesystem
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
-const upload = multer({ dest: 'uploads/' }); // temp folder for uploads
+app.use(express.json({ limit: '10mb' })); // allow large payloads
 
-// Endpoint for Roblox to POST headshots
-app.post('/upload', upload.single('file'), (req, res) => {
-    const file = req.file;
-    if (!file) return res.status(400).send('No file uploaded.');
+// Make sure uploads folder exists
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 
-    // Move the file to permanent location
-    const newPath = path.join(__dirname, 'uploads', file.originalname);
-    fs.renameSync(file.path, newPath);
+// Endpoint to accept base64 image
+app.post('/upload', (req, res) => {
+    const { filename, data } = req.body;
+    if (!filename || !data) return res.status(400).send("Missing data or filename.");
 
-    // Build a public URL
-    // Render provides a hostname automatically in RENDER_EXTERNAL_HOSTNAME
-    const url = `https://${process.env.RENDER_EXTERNAL_HOSTNAME}/uploads/${file.originalname}`;
-    
-    // Send the public URL back to Roblox
+    const buffer = Buffer.from(data, 'base64');
+    const filePath = path.join(uploadDir, filename);
+
+    fs.writeFileSync(filePath, buffer);
+
+    const hostname = process.env.RENDER_EXTERNAL_HOSTNAME || 'localhost:10000';
+    const url = `https://${hostname}/uploads/${filename}`;
     res.send(url);
 });
 
-// Serve uploaded images publicly
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Serve images publicly
+app.use('/uploads', express.static(uploadDir));
 
-// Start the server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => console.log(`Headshot server running on port ${PORT}`));
